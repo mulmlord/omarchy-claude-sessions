@@ -21,6 +21,11 @@
 # (system turn_duration) is idle, any later message busy. The newest of the
 # session's, the job file's and the job transcript's status wins.
 #
+# Claude Code can also leave an interactive session at `busy` after its turn
+# has ended (seen while background subagents run), so a busy session whose
+# transcript ends with a finished turn written after that status counts as
+# idle, and gets its shells and agents like any finished turn.
+#
 # `jobSessionId` names that job's session, so usage.sh can count its tokens here.
 #
 # `context` is how full the conversation's context window is: the last main
@@ -135,7 +140,7 @@ done < <(stat -c '%Y %W %s %n' -- "${transcripts[@]}" "${agentFiles[@]}" 2>/dev/
 # What each transcript contributes, cached as compact facts under its size and
 # mtime (scan/), one JSON object per line after the key line:
 #   {"ctx":{model,at,tokens}}   the last main assistant message (context)
-#   {"act":{ended,at}}          jobs: the last turn activity, a message or the end of a turn (status)
+#   {"act":{ended,at}}          the last turn activity, a message or the end of a turn (status)
 #   {"launch":{tu,kind,description,at,until}}  a Bash run_in_background / Monitor call
 #   {"task":{tu,id}}            its start result, which names the task id
 #   {"end":{id,t}}              a task ended: a notification with a status, a
@@ -145,7 +150,7 @@ done < <(stat -c '%Y %W %s %n' -- "${transcripts[@]}" "${agentFiles[@]}" 2>/dev/
 # record keys and a few matches from the end suffice; api-request records
 # repeat the whole conversation, so they are skipped. All stale files are
 # re-read in one pass, through one jq, and split back into their cache files.
-scanVersion=v7
+scanVersion=v8
 cacheOf() { local c=${1#"$config"/projects/}; REPLY=$scan/${c//\//%}; }
 declare -A modeOf=()
 for t in "${transcripts[@]}"; do
@@ -162,8 +167,14 @@ done
 ((${#staleFiles[@]})) && for p in "${staleFiles[@]}"; do
   mode=${modeOf[$p]}; cacheOf "$p"
   printf '{"__file":"%s","key":"%s","mode":"%s"}\n' "$REPLY" "${key[$p]} $mode $scanVersion" "$mode"
-  [[ $mode == job ]] && tac -- "$p" | grep -m 4 -E '"type":"(assistant|user)"|"subtype":"turn_duration"'
-  tac -- "$p" | grep -m 3 -F '"type":"assistant"'
+  # From the end: the last 3 assistant lines (context, an agent's state) and,
+  # outside agents, the last 4 messages or turn ends (status), in one pass.
+  tac -- "$p" | awk -v acts=$([[ $mode == agent ]] && echo 0 || echo 4) '
+    { hit = 0; asst = index($0, "\"type\":\"assistant\"") }
+    asst && na < 3 { na++; hit = 1 }
+    acts > 0 && (asst || index($0, "\"type\":\"user\"") || index($0, "\"subtype\":\"turn_duration\"")) { acts--; hit = 1 }
+    hit { print }
+    na >= 3 && acts <= 0 { exit }'
   printf '{"__bg":true}\n'
   if [[ $mode == agent ]]; then   # its own agents' and shells' ends
     grep -E '"operation":"enqueue".*"content":"<task-notification>.*(<status>|\[Monitor expired)|Successfully stopped task: ' -- "$p"
@@ -231,7 +242,7 @@ done | jq -Rnc '
                     tokens: ($l.message.usage | (.input_tokens // 0) + (.cache_read_input_tokens // 0)
                                                + (.cache_creation_input_tokens // 0)) } }]
              else . end)
-            | (if .mode == "job" and (.act | not)
+            | (if (.act | not)
                   and ($l.type == "assistant" or ($l.type == "user" and ($l.isMeta | not))
                        or ($l.type == "system" and $l.subtype == "turn_duration"))
                then .act = true | .out += [{ act: { ended: ($l.type == "system"), at: $t } }]
@@ -318,9 +329,14 @@ result=$(
             else [] end)
          | max_by(.at)) as $st
       | .status = $st.status | .waitingFor = $st.waitingFor | .statusUpdatedAt = $st.at
+      # A busy status older than a finished turn in the transcript is stale.
+      | ($tails[.sessionId].act // null) as $own
+      | (if .status == "busy" and (.job | not) and $own != null and $own.ended
+            and $own.at * 1000 > .statusUpdatedAt
+         then .status = "idle" | .statusUpdatedAt = $own.at * 1000 | .turnEnded = true else . end)
       # Claude Code reports idle only once no shell or monitor runs; a job
       # (status from its transcript) cannot tell, so it takes what was found.
-      | .shells = (if .status == "idle" and (.job | not) then [] else
+      | .shells = (if .status == "idle" and (.job | not) and (.turnEnded | not) then [] else
           [$running[] | select(.owner == $sid and .at >= $since)] | unique_by(.task) | sort_by(.at)
           | map({ kind, description, startedAt: (.at * 1000) }) end)
       | (if .status == "idle" and (.shells | length) > 0 then .status = "shell" else . end)
@@ -332,7 +348,7 @@ result=$(
         else null end)
       | .agents = ($agents[.sessionId] // [])
       | .jobSessionId = (.job.sessionId // null)
-      | del(.job))' 2>/dev/null) || result=$(jq -c 'map(.jobSessionId = (.job.sessionId // null) | del(.job))' <<< "$sessions")
+      | del(.job, .turnEnded))' 2>/dev/null) || result=$(jq -c 'map(.jobSessionId = (.job.sessionId // null) | del(.job))' <<< "$sessions")
 
 printf '%s\n' "$result" > "$out.$$" && mv -f "$out.$$" "$out"
 # Keep the fingerprint taken before reading, so a write made meanwhile still
