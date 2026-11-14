@@ -40,6 +40,14 @@ omarchy plugin add https://github.com/mulmlord/omarchy-claude-sessions.git --ena
 
 Update with `omarchy plugin update mulm.claude-sessions`.
 
+## Remove
+
+```bash
+omarchy plugin remove mulm.claude-sessions
+```
+
+This removes the widget from the bar and deletes its folder. Its cache in `~/.cache/mulm.claude-sessions/` stays behind. Delete it by hand if you like, and remove the statusline hook line if you added one.
+
 ## Optional: statusline hook
 
 Limits and context window sizes are most accurate when Claude Code's statusline passes them on. Add this to your statusline script:
