@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "mulm.claude-sessions",
+  "name": "Claude sessions",
+  "version": "1.1.0",
+  "author": "mulm",
+  "license": "MIT",
+  "description": "Running Claude Code sessions and whether each is working, waiting for you, or done, plus a tokscale-style usage panel.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Claude sessions",
+    "description": "Usage gauge (session limit + today's cost) that opens a tokscale-style usage panel, then one indicator per running Claude Code session: spinner + elapsed while working, bell when it needs you, check when done. Click a session to focus its terminal.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "pollIntervalMs": 2000,
+      "statsIntervalSec": 120,
+      "quotaIntervalSec": 60,
+      "barLabel": "Both"
+    },
+    "schema": [
+      {
+        "key": "pollIntervalMs",
+        "type": "integer",
+        "label": "Session poll interval (ms)",
+        "min": 500,
+        "max": 30000,
+        "step": 500,
+        "defaultValue": 2000
+      },
+      {
+        "key": "barLabel",
+        "type": "enum",
+        "label": "Usage in bar",
+        "options": [
+          "Both",
+          "Quota",
+          "Cost",
+          "Icon"
+        ],
+        "defaultValue": "Both",
+        "description": "Next to the gauge: the 5-hour session limit used, today's estimated cost, both, or nothing."
+      },
+      {
+        "key": "statsIntervalSec",
+        "type": "integer",
+        "label": "Usage refresh (seconds)",
+        "min": 30,
+        "max": 3600,
+        "step": 30,
+        "defaultValue": 120,
+        "description": "How often tokscale re-reads the local Claude Code transcripts."
+      },
+      {
+        "key": "quotaIntervalSec",
+        "type": "integer",
+        "label": "Limits refresh (seconds)",
+        "min": 15,
+        "max": 3600,
+        "step": 15,
+        "defaultValue": 60,
+        "description": "How often the widget re-reads the limits. They come from the Claude Code statusline while a session runs; Anthropic is asked through tokscale at most every 5 minutes."
+      }
+    ]
+  }
+}
