@@ -17,7 +17,7 @@ import qs.Ui
 // color, finished ones settle into a green check. Running subagents add a
 // robot with their count to the pill. Once the turn has ended, what still runs
 // in the background colors the pill: background shells or monitors only
-// (status "shell") a yellow terminal, subagents only (status "agents") a
+// (status "shell") a blue terminal, subagents only (status "agents") a
 // purple robot, both a terminal and robot in the hue halfway between the two
 // (shellAgentMix). Hovering the pill lists them numbered with their last tool call, plus
 // the background shells and monitors still running. A background job that
@@ -106,8 +106,8 @@ Panel {
   property color orange: "#e0915c"
   property color magenta: "#bb9af7"
   // Background shells and subagents at once: the hue halfway between the
-  // shells' yellow and the agents' purple.
-  readonly property color shellAgentMix: mixHue(yellow, magenta)
+  // shells' blue and the agents' purple.
+  readonly property color shellAgentMix: mixHue(blue, magenta)
 
   // Themes don't agree on which key holds which color (matte-black keeps its
   // amber under `green` and has no green at all), so take the palette entry
@@ -788,7 +788,7 @@ Panel {
   }
   function statusColor(s) {
     if (s.status === "busy") return yellow
-    if (s.status === "shell") return hasAgents(s) ? shellAgentMix : yellow
+    if (s.status === "shell") return hasAgents(s) ? shellAgentMix : blue
     if (s.status === "agents") return magenta
     if (s.status === "waiting") return red
     return green
@@ -1936,7 +1936,7 @@ Panel {
             width: root.sessionGutter - Style.space(4)
             horizontalAlignment: Text.AlignRight
             text: shellRow.modelData.kind === "monitor" ? root.glyph.eye : root.glyph.terminal
-            color: root.yellow
+            color: root.blue
             font.pixelSize: Style.font.caption
           }
           PlainLabel {
