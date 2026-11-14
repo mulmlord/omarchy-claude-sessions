@@ -7,8 +7,9 @@ An [Omarchy](https://omarchy.org) bar widget for [Claude Code](https://claude.co
 - **Usage gauge**: how much of the 5-hour session limit is used and today's estimated cost. Click it, or run `omarchy-shell mulm.claude-sessions toggle`, to open the usage panel.
 - **One pill per session**:
   - yellow spinner + elapsed time: working
-  - blue: the turn ended but background shells or monitors are still running
-  - magenta robot: subagents still running
+  - yellow terminal: the turn ended but background shells or monitors are still running
+  - purple robot: the turn ended but subagents are still running
+  - pink terminal + robot: both, shells and subagents (the hue halfway between yellow and purple)
   - red bell: waiting for you
   - green check: done
 - A thin line under each pill shows how full the context window is: dim below 70 %, yellow from 70 %, red from 90 %.

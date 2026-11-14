@@ -14,11 +14,12 @@ import qs.Ui
 // Next to it, one indicator per running Claude Code session, read from the
 // per-process records in ~/.claude/sessions/. Working sessions spin and show
 // how long the turn has run, sessions waiting on you ring in the urgent
-// color, sessions whose turn ended but still run background shells or
-// monitors (status "shell") show a blue terminal, finished ones settle into
-// a green check. Running subagents add a robot with their count to the pill
-// (a finished turn whose subagents still work shows the robot in magenta),
-// and hovering the pill lists them numbered with their last tool call, plus
+// color, finished ones settle into a green check. Running subagents add a
+// robot with their count to the pill. Once the turn has ended, what still runs
+// in the background colors the pill: background shells or monitors only
+// (status "shell") a yellow terminal, subagents only (status "agents") a
+// purple robot, both a terminal and robot in the hue halfway between the two
+// (shellAgentMix). Hovering the pill lists them numbered with their last tool call, plus
 // the background shells and monitors still running. A background job that
 // no open session points to gets a pill of its own. A thin line along the pill's
 // bottom shows how full the session's context window is (yellow from 70%,
@@ -104,6 +105,9 @@ Panel {
   property color blue: "#7aa2f7"
   property color orange: "#e0915c"
   property color magenta: "#bb9af7"
+  // Background shells and subagents at once: the hue halfway between the
+  // shells' yellow and the agents' purple.
+  readonly property color shellAgentMix: mixHue(yellow, magenta)
 
   // Themes don't agree on which key holds which color (matte-black keeps its
   // amber under `green` and has no green at all), so take the palette entry
@@ -137,6 +141,17 @@ Panel {
 
   // ---------- helpers ----------
   function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+  // Halfway between two colors along the shorter way around the hue circle,
+  // keeping their saturation, so the mix stays as vivid as both (an RGB
+  // average of complementary hues turns grey). Gray inputs fall back to RGB.
+  function mixHue(a, b) {
+    if (a.hslHue < 0 || b.hslHue < 0) return Qt.rgba((a.r + b.r) / 2, (a.g + b.g) / 2, (a.b + b.b) / 2, 1)
+    var d = b.hslHue - a.hslHue
+    if (d > 0.5) d -= 1
+    else if (d < -0.5) d += 1
+    var h = a.hslHue + d / 2
+    return Qt.hsla(h < 0 ? h + 1 : h, (a.hslSaturation + b.hslSaturation) / 2, (a.hslLightness + b.hslLightness) / 2, 1)
+  }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
   // Values from tokscale end up in Omarchy-owned sinks (tooltips, buttons)
@@ -417,7 +432,9 @@ Panel {
                  startedAt: Number(b.startedAt) || Date.now() }
       })
       var status = String(s.status || "idle")
-      if (status === "idle" && agents.length > 0) status = "agents"
+      // Claude Code's "shell" means something still runs in the background;
+      // if that is only subagents, show it as such.
+      if ((status === "idle" || (status === "shell" && shells.length === 0)) && agents.length > 0) status = "agents"
       var ctx = s.context && Number(s.context.size) > 0
         ? { tokens: Number(s.context.tokens) || 0, size: Number(s.context.size), pct: clamp(Math.floor(Number(s.context.pct) || 0), 0, 100) }
         : null
@@ -765,9 +782,13 @@ Panel {
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
   }
+  function hasAgents(s) {
+    if (s.group) return s.members.some(function(m) { return m.agents && m.agents.length > 0 })
+    return !!s.agents && s.agents.length > 0
+  }
   function statusColor(s) {
     if (s.status === "busy") return yellow
-    if (s.status === "shell") return blue
+    if (s.status === "shell") return hasAgents(s) ? shellAgentMix : yellow
     if (s.status === "agents") return magenta
     if (s.status === "waiting") return red
     return green
@@ -1915,7 +1936,7 @@ Panel {
             width: root.sessionGutter - Style.space(4)
             horizontalAlignment: Text.AlignRight
             text: shellRow.modelData.kind === "monitor" ? root.glyph.eye : root.glyph.terminal
-            color: root.blue
+            color: root.yellow
             font.pixelSize: Style.font.caption
           }
           PlainLabel {
