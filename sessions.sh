@@ -29,7 +29,7 @@
 # A session that asks you something is "asking": a question box is open
 # (status waiting, waitingFor "input needed"; a permission prompt says
 # "approve …" and stays waiting), or the turn is over, nothing runs in the
-# background and the last message ends its last paragraph with a question.
+# background and the last message asks a question (outside code and quotes).
 #
 # `jobSessionId` names that job's session, so usage.sh can count its tokens here.
 #
@@ -156,7 +156,7 @@ done < <(stat -c '%Y %W %s %n' -- "${transcripts[@]}" "${agentFiles[@]}" 2>/dev/
 # record keys and a few matches from the end suffice; api-request records
 # repeat the whole conversation, so they are skipped. All stale files are
 # re-read in one pass, through one jq, and split back into their cache files.
-scanVersion=v9
+scanVersion=v10
 cacheOf() { local c=${1#"$config"/projects/}; REPLY=$scan/${c//\//%}; }
 declare -A modeOf=()
 for t in "${transcripts[@]}"; do
@@ -203,10 +203,14 @@ done | jq -Rnc '
                  elif $n == "WebFetch" then ($i.url // "" | tostring | sub("^[a-z]+://"; "") | split("/")[0])
                  elif $n == "WebSearch" then ($i.query // "")
                  else ($i.description // $i.prompt // "" | firstLine) end | tostring | .[0:80]) };
-  # The last paragraph of the last text of an assistant message asks something.
+  # The last text of an assistant message asks something: a question mark ends
+  # a sentence somewhere outside code, table rows, headings, block quotes and
+  # quoted text (an example question in quotes asks nothing).
   def asks: [.message.content[]? | select(.type? == "text") | .text] | last // ""
-    | sub("\\s+$"; "") | split("\n\n") | last // ""
-    | test("\\?[*_`)\\]\"\u0027»”]*(\\s|$)");
+    | gsub("```[\\s\\S]*?```"; " ") | gsub("`[^`\\n]*`"; "X")
+    | split("\n") | map(select(test("^[ \\t]*[|#>]") | not)) | join("\n")
+    | gsub("\"[^\"\\n]*\"|„[^“\\n]*“|“[^”\\n]*”|«[^»\\n]*»"; "Q")
+    | test("\\?[*_)\\]]*(\\s|$)");
   # A tool result as text, whether a string or a list of blocks.
   def resultText: if (.content | type) == "string" then .content
                   else [.content[]? | select(.type? == "text") | .text] | join("\n") end;
