@@ -26,6 +26,11 @@
 # transcript ends with a finished turn written after that status counts as
 # idle, and gets its shells and agents like any finished turn.
 #
+# A session that asks you something is "asking": a question box is open
+# (status waiting, waitingFor "input needed"; a permission prompt says
+# "approve …" and stays waiting), or the turn is over, nothing runs in the
+# background and the last message ends its last paragraph with a question.
+#
 # `jobSessionId` names that job's session, so usage.sh can count its tokens here.
 #
 # `context` is how full the conversation's context window is: the last main
@@ -141,6 +146,7 @@ done < <(stat -c '%Y %W %s %n' -- "${transcripts[@]}" "${agentFiles[@]}" 2>/dev/
 # mtime (scan/), one JSON object per line after the key line:
 #   {"ctx":{model,at,tokens}}   the last main assistant message (context)
 #   {"act":{ended,at}}          the last turn activity, a message or the end of a turn (status)
+#   {"ask":bool}                the last message is Claude's and ends with a question
 #   {"launch":{tu,kind,description,at,until}}  a Bash run_in_background / Monitor call
 #   {"task":{tu,id}}            its start result, which names the task id
 #   {"end":{id,t}}              a task ended: a notification with a status, a
@@ -150,7 +156,7 @@ done < <(stat -c '%Y %W %s %n' -- "${transcripts[@]}" "${agentFiles[@]}" 2>/dev/
 # record keys and a few matches from the end suffice; api-request records
 # repeat the whole conversation, so they are skipped. All stale files are
 # re-read in one pass, through one jq, and split back into their cache files.
-scanVersion=v8
+scanVersion=v9
 cacheOf() { local c=${1#"$config"/projects/}; REPLY=$scan/${c//\//%}; }
 declare -A modeOf=()
 for t in "${transcripts[@]}"; do
@@ -197,6 +203,10 @@ done | jq -Rnc '
                  elif $n == "WebFetch" then ($i.url // "" | tostring | sub("^[a-z]+://"; "") | split("/")[0])
                  elif $n == "WebSearch" then ($i.query // "")
                  else ($i.description // $i.prompt // "" | firstLine) end | tostring | .[0:80]) };
+  # The last paragraph of the last text of an assistant message asks something.
+  def asks: [.message.content[]? | select(.type? == "text") | .text] | last // ""
+    | sub("\\s+$"; "") | split("\n\n") | last // ""
+    | test("\\?[*_`)\\]\"\u0027»”]*(\\s|$)");
   # A tool result as text, whether a string or a list of blocks.
   def resultText: if (.content | type) == "string" then .content
                   else [.content[]? | select(.type? == "text") | .text] | join("\n") end;
@@ -246,6 +256,9 @@ done | jq -Rnc '
                   and ($l.type == "assistant" or ($l.type == "user" and ($l.isMeta | not))
                        or ($l.type == "system" and $l.subtype == "turn_duration"))
                then .act = true | .out += [{ act: { ended: ($l.type == "system"), at: $t } }]
+               else . end)
+            | (if (.said | not) and ($l.type == "assistant" or ($l.type == "user" and ($l.isMeta | not)))
+               then .said = true | .out += [{ ask: ($l.type == "assistant" and ($l | asks)) }]
                else . end)
           end
       end;
@@ -301,6 +314,7 @@ result=$(
       else . end
     elif $l.ctx then .tx[.cur.tx].ctx = $l.ctx
     elif $l.act then .tx[.cur.tx].act = $l.act
+    elif ($l | has("ask")) then .tx[.cur.tx].ask = $l.ask
     elif $l.launch then .launches[$l.launch.tu] = ($l.launch + { owner: .cur.owner })
     elif $l.task then .taskOf[$l.task.tu] = $l.task.id
     else . end)
@@ -347,6 +361,12 @@ result=$(
           | { tokens: $ctx.tokens, size: $win, pct: ([$ctx.tokens * 100 / $win | floor, 100] | min) }
         else null end)
       | .agents = ($agents[.sessionId] // [])
+      # The newest transcript of the conversation (that of the job, once
+      # parked) says whether the finished turn ended on a question.
+      | ([$ids[] | $tails[.] // empty | select(.act != null)] | max_by(.act.at)) as $tail
+      | (if (.status == "waiting" and .waitingFor == "input needed")
+            or (.status == "idle" and ($tail.ask // false) and (.agents | length) == 0)
+         then .status = "asking" else . end)
       | .jobSessionId = (.job.sessionId // null)
       | del(.job, .turnEnded))' 2>/dev/null) || result=$(jq -c 'map(.jobSessionId = (.job.sessionId // null) | del(.job))' <<< "$sessions")
 

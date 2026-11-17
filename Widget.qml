@@ -14,7 +14,9 @@ import qs.Ui
 // Next to it, one indicator per running Claude Code session, read from the
 // per-process records in ~/.claude/sessions/. Working sessions spin and show
 // how long the turn has run, sessions waiting on you ring in the urgent
-// color, finished ones settle into a green check. Running subagents add a
+// color, sessions asking you something (a question box, or a finished turn
+// that ends with a question) show an orange question mark, finished ones
+// settle into a green check. Running subagents add a
 // robot with their count to the pill. Once the turn has ended, what still runs
 // in the background colors the pill: background shells or monitors only
 // (status "shell") a blue terminal, subagents only (status "agents") a
@@ -47,6 +49,7 @@ Panel {
     gauge: String.fromCodePoint(0xF029A),
     check: String.fromCodePoint(0xF012C),
     bell: String.fromCodePoint(0xF009E),
+    question: String.fromCodePoint(0xF1738),
     terminal: String.fromCodePoint(0xF018D),
     refresh: String.fromCodePoint(0xF0450),
     loading: String.fromCodePoint(0xF0996),
@@ -566,6 +569,7 @@ Panel {
   function stateLabel(s) {
     if (s.status === "busy") return "working for " + elapsed(nowMs - s.since)
     if (s.status === "waiting") return "waiting for you" + (s.waitingFor ? " (" + s.waitingFor + ")" : "") + " for " + elapsed(nowMs - s.since)
+    if (s.status === "asking") return (s.waitingFor ? "question box open" : "asked you a question") + " for " + elapsed(nowMs - s.since)
     if (s.status === "shell") return "background shells/monitors running for " + elapsed(nowMs - s.since)
     if (s.status === "agents") return "subagents running for " + elapsed(nowMs - s.since)
     return "done " + elapsed(nowMs - s.since) + " ago"
@@ -674,6 +678,7 @@ Panel {
   function statusGlyph(s) {
     if (s.status === "busy") return spinnerFrames[spinnerFrame]
     if (s.status === "waiting") return glyph.bell
+    if (s.status === "asking") return glyph.question
     if (s.status === "shell") return glyph.terminal
     if (s.status === "agents") return glyph.robot
     return glyph.check
@@ -686,14 +691,14 @@ Panel {
   // end of the center sections, and takes the least compact level whose
   // pills fit there:
   //   0–13 project names shorten one character per level (18 → 5) ·
-  //   14 done sessions drop their name · 15 only waiting sessions keep one ·
+  //   14 done sessions drop their name · 15 only waiting and asking sessions keep one ·
   //   16 icons only · 17 one pill per state with a count
   readonly property int nameLevels: 13
   readonly property int groupLevel: nameLevels + 4
   readonly property int maxCompactLevel: groupLevel
   property int compactLevel: 0
   property var centerSections: null
-  readonly property var statusOrder: ["waiting", "busy", "shell", "agents", "idle"]
+  readonly property var statusOrder: ["waiting", "asking", "busy", "shell", "agents", "idle"]
   readonly property var pillModel: compactLevel >= groupLevel ? groupSessions(sessions) : sessions
 
   function groupSessions(list) {
@@ -712,7 +717,7 @@ Panel {
     var time = timed ? " " + elapsed(nowMs - s.since) : ""
     var name = " " + project(s, 18 - Math.min(level, nameLevels))
     if (level >= nameLevels + 3) return g
-    if (level >= nameLevels + 2) return s.status === "waiting" ? g + name : g + time
+    if (level >= nameLevels + 2) return s.status === "waiting" || s.status === "asking" ? g + name : g + time
     if (level >= nameLevels + 1 && s.status === "idle") return g
     return g + time + name
   }
@@ -791,6 +796,7 @@ Panel {
     if (s.status === "shell") return hasAgents(s) ? shellAgentMix : blue
     if (s.status === "agents") return magenta
     if (s.status === "waiting") return red
+    if (s.status === "asking") return orange
     return green
   }
 

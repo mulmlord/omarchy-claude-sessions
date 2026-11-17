@@ -10,7 +10,8 @@ An [Omarchy](https://omarchy.org) bar widget for [Claude Code](https://claude.co
   - blue terminal: the turn ended but background shells or monitors are still running
   - purple robot: the turn ended but subagents are still running
   - indigo terminal + robot: both, shells and subagents (the hue halfway between blue and purple)
-  - red bell: waiting for you
+  - red bell: waiting for you (a permission prompt or other dialog)
+  - orange question mark: Claude asks you something, in a question box or at the end of a finished turn (its last paragraph contains a question)
   - green check: done
 - A thin line under each pill shows how full the context window is: dim below 70 %, yellow from 70 %, red from 90 %.
 - Hover a pill to see its subagents, background tasks and context. Click it to focus the terminal the session runs in.
