@@ -14,7 +14,7 @@ An [Omarchy](https://omarchy.org) bar widget for [Claude Code](https://claude.co
   - orange question mark: Claude asks you something, in a question box or at the end of a finished turn (its last message asks a question; questions in code, tables, headings and quotes don't count)
   - green check: done
 - A thin line under each pill shows how full the context window is: dim below 70 %, yellow from 70 %, red from 90 %.
-- Hover a pill to see its subagents, background tasks and context. Click it to focus the terminal the session runs in.
+- Hover a pill to see its subagents, background tasks and context. Click it to focus the terminal the session runs in; a session in a [herdr](https://herdr.dev) pane gets that pane focused in the herdr window (one opens if none is attached).
 - When the bar runs out of room, pills shorten step by step, down to one pill per state with a count. They never push into the clock.
 
 ## Usage panel
