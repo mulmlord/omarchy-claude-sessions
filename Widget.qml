@@ -541,13 +541,14 @@ Panel {
     setPeriod(periods[(i + dx + periods.length) % periods.length].value)
   }
   function openTokscale() {
-    launchProc.command = ["omarchy-launch-tui", "tokscale"]
-    launchProc.running = true
+    Quickshell.execDetached(["omarchy-launch-tui", "tokscale"])
     close()
   }
+  // Detached: focus.sh may exec a terminal (herdr window, tokscale) that lives
+  // on. A Process child would stay "running" that long and swallow every later
+  // click, because setting running = true on a running Process does nothing.
   function focusSession(pid) {
-    focusProc.command = [root.pluginDir + "/focus.sh", String(pid)]
-    focusProc.running = true
+    Quickshell.execDetached([root.pluginDir + "/focus.sh", String(pid)])
   }
   function handleKey(t) {
     if (t >= "1" && t <= "4") setPeriod(periods[Number(t) - 1].value)
@@ -835,9 +836,6 @@ Panel {
       onStreamFinished: root.applySessionUsage(text)
     }
   }
-
-  Process { id: focusProc }
-  Process { id: launchProc }
 
   Timer {
     interval: root.pollIntervalMs

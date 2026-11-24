@@ -4,9 +4,10 @@
 # it lives on a special workspace), then focus the window.
 #
 # A session in a herdr pane (HERDR_PANE_ID in its environment) has the herdr
-# server as its parent, which owns no window. herdr brings that pane to the
-# front instead, and the walk starts from the attached herdr clients; with none
-# attached, a herdr window opens on it.
+# server as its parent, which owns no window. herdr brings that pane, its tab
+# and its space to the front instead, and the walk starts from the attached
+# herdr clients; with none attached, a herdr window opens on it. The widget
+# runs this script detached, so that window never ties up later clicks.
 pid=$1
 clients=$(hyprctl clients -j)
 
@@ -35,6 +36,15 @@ fi
 
 if [[ -n $pane ]] && command -v herdr > /dev/null; then
   [[ -n $sock ]] && export HERDR_SOCKET_PATH=$sock   # a named herdr session's server
+  # The environment holds the pane id from launch; ask herdr where the session
+  # lives now, so a pane moved to another space since then is still found.
+  sid=$(jq -r '.sessionId // empty' "$HOME/.claude/sessions/$pid.json" 2>/dev/null)
+  if [[ -n $sid ]]; then
+    now=$(herdr agent list 2>/dev/null |
+      jq -r --arg sid "$sid" 'first(.result.agents[]? | select(.agent_session.value? == $sid) | .pane_id) // empty')
+    [[ -n $now ]] && pane=$now
+  fi
+  # Focusing the pane also switches herdr to its space (workspace) and tab.
   herdr agent focus "$pane" > /dev/null 2>&1
   for c in $(pgrep -x herdr); do
     mapfile -d '' -t args < "/proc/$c/cmdline" 2>/dev/null || continue
